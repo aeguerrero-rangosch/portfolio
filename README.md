@@ -16,5 +16,7 @@ Work 3
 
 ### Projects
 Proj 1
+
 Proj 2
+
 Proj 3
