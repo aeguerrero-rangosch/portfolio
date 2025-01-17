@@ -17,7 +17,7 @@ University of Chicago
 **Data Analyst**
 
 **Freelance Data Analyst and Scientist** | Houston, Texas *(2022-2023)*
-- Point 1
+- Completed, and aided in, 4 projects as a freelance data scientist and 1 as a freelance data analyst for various researchers, students, and individual businesses.
 - Point 2
   
 **Research Assistant**
