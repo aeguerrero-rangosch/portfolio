@@ -1,0 +1,193 @@
+
+#--------------------------------------------------------------
+# Variable Codebook:
+#   
+# 1. age: 
+#     18-24 years old: 1
+#     25-34 years old: 2
+#     35-44 years old: 3
+#     45-54 years old: 4
+#     55 or older: 5
+#   
+# 2. gender:
+#     male: 1
+#     female: 2
+#     other: 3
+#     prefer not to say: 4
+#   
+# 3. nationality:
+#     dutch: 1
+#     international: 2
+#   
+# 3. education:
+#     high school: 1
+#     mbo degree: 2
+#     hbo degree: 3
+#     bachelor's: 4
+#     master's: 5
+#     doctorate: 6
+#     
+# 4. relationship:
+#     married: 1
+#     in a relationship: 2
+#     single: 3
+#     divorced: 4
+#     prefer not to say: 5
+#   
+# 5. children:
+#     yes: 1
+#     no: 2
+#   
+# 6. employment: 
+#     full-time: 1
+#     part-time: 2
+#     unemployed and looking: 3
+#     unemployed and not looking: 4
+#     self-employed: 5
+#     retired: 6
+#     student: 7
+#     student/full-time: 8
+#     student/part-time: 9
+#     student/part-time/self-employed: 10
+#     full-time/self-employed: 11
+#     student/umemployed and looking: 12
+#   
+# 7. income:
+#     <10,000 eur: 1
+#     10,000-14,999 eur: 2
+#     15,000-19,999 eur: 3
+#     20,000-24,999 eur: 4
+#     25,000-29,999 eur: 5
+#     30,000-34,999 eur: 6
+#     35,000-39,999 eur: 7
+#     40,000-44,999 eur: 8
+#     >45,000 eur: 9
+#   
+# 8. nogift:
+#     yes: 1
+#     no: 2
+#   
+# 9. nogift_amount:
+#     varies
+# 
+# 10. uncongift:
+#     yes: 1
+#     no: 2
+#     
+# 11. uncongift_amount:
+#     varies
+# 
+# 12. congift:
+#     yes: 1
+#     no: 2
+#   
+# 13. congift_amount:
+#     varies
+#--------------------------------------------------------------  
+  
+# Packages:
+library(foreign)
+library(tidyverse)
+library(ggdag)
+library(dplyr)
+library(tinytex)
+library(jtools)
+library(huxtable)
+library(summarytools)
+library(ggstance)
+library(pwr)
+library(broom.mixed)
+
+
+# Importing Data:
+data <- read.csv(file='snsb_data.csv')
+head(data)
+
+# Summary Statistics: 
+summary(data)
+
+# Balance Check:
+ctable(data$treatment1, data$age)
+ctable(data$treatment2, data$age)
+ctable(data$control, data$age)
+
+ctable(data$treatment1, data$gender)
+ctable(data$treatment2, data$gender)
+ctable(data$control, data$gender)
+
+ctable(data$treatment1, data$nationality)
+ctable(data$treatment2, data$nationality)
+ctable(data$control, data$nationality)
+
+ctable(data$treatment1, data$education)
+ctable(data$treatment2, data$education)
+ctable(data$control, data$education)
+
+ctable(data$treatment1, data$relationship)
+ctable(data$treatment2, data$relationship)
+ctable(data$control, data$relationship)
+
+ctable(data$treatment1, data$employment)
+ctable(data$treatment2, data$employment)
+ctable(data$control, data$employment)
+
+ctable(data$treatment1, data$income)
+ctable(data$treatment2, data$income)
+ctable(data$control, data$income)
+
+# Hypothesis Testing: Probability of Donating
+# 4. No gift < conditional gift
+fisher.test(data$donate[data$group != 2], 
+            data$groupfactor[data$group != 2], 
+            alternative = "less")
+  # p-value = 0.05
+  # Reject null at 10%
+
+
+# 5. No gift < unconditional gift
+fisher.test(data$donate[data$group != 3], 
+            data$groupfactor[data$group != 3], 
+            alternative = "less")
+  # p-value = 0.9
+  # Cannot reject null
+
+
+# 3. Unconditional gift < conditional gift
+fisher.test(data$donate[data$group != 1], 
+            data$groupfactor[data$group != 1], 
+            alternative = "less")
+  # p-value = 0.25
+  # Cannot reject null
+
+            
+# 1. No gift < gift
+fisher.test(data$donate, 
+            data$group2, 
+            alternative = "less")
+            
+# Chi-Squared:
+chisq.test(data$donate, data$group)
+
+#--------------------------------------------------------------  
+
+# Hypothesis Testing: Amount of Donating
+x <- data$totalamount[data$group==1]
+y <- data$totalamount[data$group==2]
+z <- data$totalamount[data$group==3]
+a <- data$totalamount[data$group2==1]
+b <- data$totalamount[data$group2==2]
+
+# 4. No gift < conditional gift
+wilcox.test(x, z, "less", paired=FALSE, exact=FALSE)
+
+# 5. No gift < unconditional gift
+wilcox.test(x, y, "less", paired=FALSE, exact=FALSE)
+
+# 3. Unconditional gift < conditional gift
+wilcox.test(y, z, "less", paired=FALSE, exact=FALSE)
+
+# 1. No gift < gift
+wilcox.test(b, a, "less", paired=FALSE, exact=FALSE)
+
+
+  
