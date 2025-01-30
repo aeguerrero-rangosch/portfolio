@@ -34,8 +34,4 @@ University of Chicago
 -	Liaised with researchers, local health and academic institutions, and governmental agencies nationally and internationally, facilitating cooperation and allowing access to previously underutilized or new data sources.
 
 ### Projects
-Proj 1
-
-Proj 2
-
-Proj 3
+See projects at 
