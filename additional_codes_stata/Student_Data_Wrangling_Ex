@@ -1,0 +1,206 @@
+/*******************************************************************************
+*	File name:		data_wrangling.do
+*  	Author(s):		Alessandra Guerrero
+*
+*	Inputs:			student_data.csv
+*	
+*	Outputs:		blueprint_data_cleaned.dta
+* 
+*******************************************************************************/
+
+ 
+**********************
+//Preliminaries 
+**********************
+
+
+version 15.1 	//tells future Stata versions that this .do file is written in 15.1 
+clear all 		//clears errything 
+set more off 	//tells stata not to pause when "more" message displayed in console 
+
+
+**********************
+//Import Data
+**********************
+
+
+//We import the data for the first time
+cd "C:\Users\aless\OneDrive\Desktop\Data Construction\1\data"   //set the filepath
+import delimited "C:\Users\aless\Downloads\student_data.csv", clear  //import data delimited, telling stata to clear
+cd "C:\Users\aless\OneDrive\Desktop\Data Construction\1"		 //set the working directory
+
+
+********************************************************************************
+*********                      0		                      **********
+********************************************************************************
+
+
+//We first want to destring our string variables into numerical (continuous) variables to be able to regress them
+destring exam_score_normalized, replace force   	 //Destringing normalized exam scores 
+destring lagged_exam_score_normalized, replace force //Destringing lagged normalized exam scores
+
+//We want to create categorical variables from the string variables provided, by using the _cat and egen commands
+//This allows us to use them in regressions and later clean them 
+egen race_cat = group(race), label 					 //Creating a categorical variable for race 
+egen school_cat = group(school), label				 //Creating a categorical variable for school
+egen two_parent_cat = group(two_parent), label 		 //Creating a categorical variable for parents status, two or no
+egen free_lunch_cat = group(free_lunch), label 		 //Creating a categorical variable for free lunch, yes or no
+egen age_cat = group(age), label 					 //Creating a categorical variable for ages 11, 12, and 13
+egen classroom_cat = group(classroom), label 		 //Creating a categorical variable for classroom number, turns -99 into 1
+
+//We want to create dummies for the variables that have missing values "NA" to be able to regress them
+//This does not clean them, just allows us to regress them 
+generate two_parent_dum = 0							 //Creating a dummy for two_parent, assuming "No"
+replace two_parent_dum = 1 if two_parent == "Yes"	 //If two_parent dummy is 1, then we assume "Yes"
+
+generate sex_dum = 0								 //Creating a dummy for sex, assuming "Female"
+replace sex_dum = 1 if sex == "Male"				 //If sex dummy is 1, then we assume "Male"
+
+generate treated_dum = 0							 //Creating a dummy for treated, assuming "No"
+replace treated_dum = 1 if treated == "Yes" 		 //If treated dummy is 1, then we assume "Yes"
+
+
+**********************
+//Regressions
+**********************
+
+
+//We first regress the treatment without controls
+regress exam_score_normalized i.treated_dum 
+
+//We then regress the treatment will all given controls, naively
+//We are just using the dummies and _cat variables from above
+regress exam_score_normalized lagged_exam_score_normalized i.two_parent_dum i.treated_dum i.sex_dum i.race_cat i.school_cat i.free_lunch_cat i.age_cat i.classroom_cat 
+
+			  
+**********************
+//Re-import 
+**********************
+
+
+clear all															 //clears all results/data/variables
+cd "C:\Users\aless\OneDrive\Desktop\Data Construction\1\data"  
+import delimited "C:\Users\aless\Downloads\student_data.csv", clear  //import data delimited, telling stata to clear  
+cd "C:\Users\aless\OneDrive\Desktop\Data Construction\1"	     //set the working directory
+						  
+						  
+********************************************************************************
+*********                      I	                              **********
+********************************************************************************
+
+//We have to reimport/destring all the variables (dummies and categorical variables) from Question 0 to be able to clean them
+//Importing all created dummies from Question 0
+generate two_parent_dum = 0							 //Creating a dummy for two_parent, assuming "No"
+replace two_parent_dum = 1 if two_parent == "Yes"	 //If two_parent dummy is 1, then we assume "Yes"
+
+generate sex_dum = 0								 //Creating a dummy for sex, assuming "Female"
+replace sex_dum = 1 if sex == "Male"				 //If sex dummy is 1, then we assume "Male"
+
+generate treated_dum = 0							 //Creating a dummy for treated, assuming "No"
+replace treated_dum = 1 if treated == "Yes" 		 //If treated dummy is 1, then we assume "Yes"
+
+// Destringing variables as in Question 0
+destring exam_score_normalized, replace force   	 //Destringing normalized exam scores 
+destring lagged_exam_score_normalized, replace force //Destringing lagged normalized exam scores
+
+//Recreate our categorial variables as in Question 0
+egen race_cat = group(race), label 					 //Creating a categorical variable for race 
+egen two_parent_cat = group(two_parent), label 		 //Creating a categorical variable for parents status, two or no
+egen free_lunch_cat = group(free_lunch), label 		 //Creating a categorical variable for free lunch, yes or no
+egen age_cat = group(age), label 					 //Creating a categorical variable for ages 11, 12, and 13
+egen classroom_cat = group(classroom), label 		 //Creating a categorical variable for classroom number, turns -99 into 1
+//Note: We want to create school_cat after cleaning up our school observations to be able to regress in Question 2
+
+//We want to now clean the data properly, which means we must create "missing" variables
+//This form of cleaning allows us to keep track of the original data and clean our categorical variables
+//We want to clean our race variable by creating a "missing" dummy that allows us to keep track of which values are missing
+generate missing_race = 0							  //Creating a missing variable, setting equal to 0	 
+replace missing_race = 1 if race == "NA"			  //If value is missing, we set it equal to 1
+tab race_cat, nolabel mi							  //Tabulating allows us to view the number of missing values compared to other values
+replace race_cat = 1 if race_cat == 3				  //We want to move our missing values (3) to another of the value categories, this moves to Black
+tab race_cat, nolabel mi
+
+//We want to clean our free_lunch variable by creating a "missing" dummy that allows us to keep track of which values are missing
+generate missing_free_lunch = 0						  //Creating a missing variable, setting equal to 0	 
+replace missing_free_lunch = 1 if free_lunch == "NA"  //If value is missing, we set it equal to 1
+tab free_lunch_cat, nolabel mi						  //Tabulating allows us to view the number of missing values compared to other values
+replace free_lunch_cat = 2 if free_lunch_cat == 1     //We want to move our missing values (1) to another of the value categories, this moves to "No"
+tab free_lunch_cat, nolabel mi
+
+//We want to clean our two_parent variable by creating a "missing" dummy that allows us to keep track of which values are missing
+generate missing_two_parent = 0						  //Creating a missing variable, setting equal to 0	 
+replace missing_two_parent = 1 if two_parent == "NA"  //If value is missing, we set it equal to 1
+tab two_parent_cat, nolabel mi						  //Tabulating allows us to view the number of missing values compared to other values
+replace two_parent_cat = 2 if two_parent_cat == 1	  //We want to move our missing values (1) to another of the value categories, this moves to "No"
+tab two_parent_cat, nolabel mi
+
+//We want to clean our classroom variable by creating a "missing" dummy that allows us to keep track of which values are missing
+generate missing_classroom = 0						  //Creating a missing variable, setting equal to 0	 
+replace missing_classroom = 1 if classroom == -99     //If value is missing (-99), we set it equal to 1
+tab classroom_cat, nolabel mi						  //Tabulating allows us to view the number of missing values compared to other values
+replace classroom_cat = 2 if classroom_cat == 1		  //We want to move our missing values (1) to another of the value categories, this moves to classroom 3
+tab classroom_cat, nolabel mi
+
+//In this case, the category of school_cat must be created after cleaning up our school variable, as the program won't allow otherwise
+//To clean up the school variable, we must clean the actual input of the values
+replace school = trim(school)						 	 //Removes spaces before & after each school value
+replace school = proper(school) 					     //Proper case for all school names
+replace school = "Washington" if school == "Washington." //This replaces all Washington with period afterwards with Washington
+egen school_cat = group(school), label					 //Creating a categorical variable for school
+tab school_cat
+
+//To clean extranous observations, we drop missing observations and those that appear to be non-sensible outliers
+//We want to apply our first filter, filtering out outliers and missing values from our exam score variables
+drop if exam_score_normalized == .						 								//We drop the observations that are missing from exam_score
+gen exam_diff_normalized = abs(lagged_exam_score_normalized - exam_score_normalized)	//Creating a new table for the difference between the scores (absolute value of the different)
+drop if exam_diff_normalized > 3														//Dropping observations that are outliers, aka those that are greater than (3) standard deviations from the mean
+
+
+********************************************************************************
+*********                      II	                              **********
+********************************************************************************
+
+
+//We now regress to test the treatement without our controls
+regress exam_score_normalized i.treated_dum
+
+//Now to see if we can still use all of the controls we used previously and avoid collinearity, we can test the correlation between the controls (except lagged scores)
+corr race_cat free_lunch_cat two_parent_cat age_cat
+
+//Because there is no significant collinearity, we can continue using the same controls
+//We now regress to test the treatment with our controls, which includes all other variables
+regress exam_score_normalized i.treated_dum lagged_exam_score_normalized i.race_cat i.missing_race i.age_cat i.two_parent_cat i.missing_two_parent i.school_cat i.free_lunch_cat i.missing_free_lunch i.sex_dum i.classroom_cat i.missing_classroom
+
+
+********************************************************************************
+*********                      III                            	      **********
+********************************************************************************
+
+
+//To test randomization, we can perform the Chi2 test for independence between each categorical variable and treated
+tab sex treated, chi2				//Testing Chi2 for treatment and sex
+tab race_cat treated, chi2			//Testing Chi2 for treatment and race
+tab school_cat treated, chi2		//Testing Chi2 for treatment and schools
+tab free_lunch_cat treated, chi2	//Testing Chi2 for treatment and free lunch
+tab two_parent_cat treated, chi2	//Testing Chi2 for treatment and two parents
+tab age treated, chi2				//Testing Chi2 for treatment and age
+tab classroom_cat treated, chi2		//Testing Chi2 for treatment and classrooms
+
+
+********************************************************************************
+*********                      IV                            	      **********
+********************************************************************************
+
+//To fix the randomization problem, we are first testing for heteroskedasticity in the data, as it is an easy way to fix misspecification errors
+//We test for heteroskedasticity using the Breusch-Pagan/Cook-Weisberg Heteroskedasticity Test
+estat hettest
+//Because the hettest gave us that the data is heteroskedastic (reaffirming the lack of independence of school and classroom), we reregress
+//The commmand hetregress allows us to regress with heteroskedasticity in the data, withoutt having to use weighted least squares, gls, or other forms of correction
+hetregress exam_score_normalized i.treated_dum lagged_exam_score_normalized i.race_cat i.missing_race i.age_cat i.two_parent_cat i.missing_two_parent i.school_cat i.free_lunch_cat i.missing_free_lunch i.sex_dum i.classroom_cat i.missing_classroom, het(i.treated_dum)
+
+
+
+
+
+
+
