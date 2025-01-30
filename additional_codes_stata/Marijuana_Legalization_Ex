@@ -1,0 +1,163 @@
+*******************************************************************************/
+
+**********************
+//Preliminaries 
+**********************
+
+version 15.1	//tells future Stata versions that this .do file is written in 15.1
+clear all		//clears everything 
+set more off	//tells stata not to pause when "more" message displayed in console 
+
+
+**********************
+//Import Data
+**********************
+
+//we import the data for the first time
+cd "C:\Users\aless\OneDrive\Desktop\Data Construction\2\data"		//set the filepath
+import delimited C:\Users\aless\Downloads\fatalities_data_output.csv	//import data delimited, not clearing for merging later
+cd "C:\Users\aless\OneDrive\Desktop\Data Construction\2"			//set the working directory
+
+********************************************************************************
+*********                 Merging & Figures               **********
+********************************************************************************
+
+**********************
+//Merging Data
+**********************
+
+//we first want to merge the fatalities and popilation data to be able to use both in regressions
+//we want to match the variable names in both data sets and sort equally to merge properly
+rename state state_names		//renaming states variable in fatalities data to match the variable name in population data
+sort state_names year 			//sorting to assure that the data sets are merged successfully
+save fatalities_merged			//saving a separate .dta file in which we will merge both data sets
+clear all						//clearing the data to import the population data set
+
+//we now want to import and prepare the population data set to merge with the fatalities data set
+import delimited C:\Users\aless\OneDrive\Desktop\states_population.csv	//importing the population data set
+sort state_names year													//sorting equally to assure merging with the fatalities data
+merge m:m state_names using fatalities_merged							//merging "many to many" state variables from each data sets using out new .dta file
+drop _merge																//dropping _merge variable that holds no relevant information
+save fatalities_population_merged										//save a new .dta file that holds fatalities and population merged data
+clear all																//clear all data to import legalization data set
+
+import delimited C:\Users\aless\OneDrive\Desktop\marijuana_legalization_status.csv //importing legalization data set
+sort state_names																   //sorting equally to merge with fatalities_population_merged
+merge 1:m state_names using fatalities_population_merged						   //merging "one to many" state variables from the merged data set and legalization data set
+drop _merge																		   //dropping _merge variable that holds no relevant information
+
+**********************
+//Figures
+**********************
+
+//creating the first figure
+graph bar (mean) fatalities, over(state_names)				//creating a bar graph of means of fatalities (1997-2017) by state
+
+//saving figure onto figure filepath
+graph save Graph "C:\Users\aless\OneDrive\Desktop\Data Construction\pset_2\figure\fatalities_state.gph"
+
+//creating the second figure and creating our future regressand: fatalities per capita
+generate fatalities_per_capita = fatalities / population	//creating the fatalities per capita variable for figure and future regressions
+graph bar (mean) fatalities_per_capita, over(state_names)	//creating a bar graph of means of fatalities per capita (1997-2017) by state
+
+//saving figure onto figure filepath
+graph save Graph "C:\Users\aless\OneDrive\Desktop\Data Construction\pset_2\figure\fatalities_pc_state.gph"
+
+//creating the third figure and creating new categorical variable for future regression
+egen state_cat = group(state_names), label					//creating a categorical variable from the string of states (called state_names from merging) to regress later
+twoway line fatalities_per_capita year, by(state_cat)		//creating a series of time-series (1997-2017) graphs of fatalities per capita by state
+
+//saving figure onto figure filepath
+graph save Graph "C:\Users\aless\OneDrive\Desktop\Data Construction\pset_2\figure\fatalities_by_state_by_year.gph"
+
+********************************************************************************
+*********                  Regression                      **********
+********************************************************************************
+
+**********************
+//Data Manipulation 
+**********************
+
+sort state_names year											//sorting again to assure data looks clean and is easy to follow
+
+//to perform the regressions in this section, we want to build several dummies for our different regressors
+//creating the dummies for whether or not marijuana is wholly legal or illegal
+generate illegal_dummy = 0										//creating a dummy for illegal, assuming "legal"
+replace illegal_dummy = 1 if treatment_effective_year == 0		//if illegal dummy = 1, we assume marijuana is illegal
+
+//creating the dummies for whether or not enforcement and legislation is stringent and strict
+generate control_dummy = 0										//creating a dummy for control, assuming "lax/not stringent"
+replace control_dummy = 1 if control == "TRUE"					//if control dummy = 1, we assume "stringent/strict"
+	
+//creating the dummies for whether or not recreational marijuana is legal (medical marijuana notwithstanding)
+generate recreational_dummy = 1									//creating a dummy for recreational, assuming "legal" for 1
+replace recreational_dummy = 0 if treatment_effective_year == 0	//if illegal dummy = 0, we assume recreational marijuana is illegal
+
+sort state_names												//sorting again to assure data looks clean and is easy to follow			
+
+//now we want to create a continuous variable from the weights columns in legalization data, to see if upon the effective date of legalization affect crashes
+gen weighted_medical = 0										//creating a variable for effective date of medical marijuana
+gen weighted_effective = 0										//creating a variable for effective date of recreational marijuana
+
+//we essentially want to set the weights given at the date in which marijuana was legalized
+//weights are done by the fraction of days remaining in the year after effective date of legalization 
+replace weighted_medical = medical_legalization_weights			//put in the weights into the new variable for medical marijuana
+replace weighted_medical = 0 if medical_legalization_year > year//if the year of legalization is greater than the year total, keep the 0 (still not legalized)
+replace weighted_medical = 1 if medical_legalization_year < year//if the year of legalization is lesser than the year total, subsitute in a 1 full year legalized)
+replace weighted_medical = 0 if medical_legalization_year == 0	//replace 0 for all years 0
+
+replace weighted_effective = treatment_effective_weights		 //put in the weights into the new variable for recreational marijuana
+replace weighted_effective = 0 if treatment_effective_year > year//if the year of legalization is greater than the year total, keep the 0 (still not legalized)
+replace weighted_effective = 1 if treatment_effective_year < year//if the year of legalization is lesser than the year total, subsitute in a 1 full year legalized)
+replace weighted_effective = 0 if treatment_effective_year == 0	 //replace 0 for all years 0
+
+sort state_names year											 //sorting again to assure data looks clean and is easy to follow
+			
+**********************
+//Regression
+**********************
+
+//our first regression, for the sake of looking at all the data, contains the state categorical variable to see the state effects
+//i chose to exclude the recreational dummy from this regression because it makes a lot of other dummies collinear, which confuses the output 
+regress fatalities_per_capita i.illegal_dummy i.control_dummy i.state_cat weighted_effective weighted_medical, noconstant
+
+//store the estimates from this regression: a simpler regression excluding the (unnecessary) state effects, but keeping all other regressors from before
+//then exporting the regression table from stata to a latex document for visual purposes 
+eststo: regress fatalities_per_capita i.control_dummy i.illegal_dummy weighted_effective weighted_medical
+esttab using model1.tex, cells(b(star fmt(7)) se(par fmt(6))) legend label title(Model 1 Regression) varlabels(_cons Constant) stats(r2 df_r, fmt(4 2) label(R-Squared DF))
+
+eststo clear	//clear the estimates from the regression above
+
+********************************************************************************
+*********              Problem 4: Sensitivity Table                   **********
+********************************************************************************
+
+//now to create a sensitivity table, we need various models (i will be including 5), each with varying number of regressors
+//this first regression (1) relies only on the dummies, and only if control assumed 0, storing at est1
+eststo: regress fatalities_per_capita i.control_dummy i.illegal_dummy if control_dummy == 0
+//this regression i chose to exclude, as setting the control 1 creates a collinearity problem 
+*eststo: regress fatalities_per_capita i.control_dummy i.illegal_dummy if control_dummy == 1*
+
+//this regression i chose to exclude, as setting the illegal 0 creates a collinearity problem 
+*eststo: regress fatalities_per_capita i.control_dummy i.illegal_dummy if illegal_dummy == 0*
+//this second regression (2) relies only on the dummies, and only if illegal assumed 1, storing at est2
+eststo: regress fatalities_per_capita i.control_dummy i.illegal_dummy if illegal_dummy == 1
+
+//this third regression (3) relies on the dummies as well as the effective date of recreational marijuana legalization, assuming control 0
+//stored as est3
+eststo: regress fatalities_per_capita i.control_dummy i.illegal_dummy weighted_effective if control_dummy == 0
+//this regression i chose to exclude, as setting the control 1 creates a collinearity problem 
+*eststo: regress fatalities_per_capita i.control_dummy i.illegal_dummy weighted_effective if control_dummy == 1*
+
+//the fourth regression (4) relies on the above, but not setting any dummies as anything, stored as est4
+eststo: regress fatalities_per_capita i.control_dummy i.illegal_dummy weighted_effective 
+
+//the last regression (5) is the one done in the section above, which is the (Model 1) regression, stored as est5
+eststo: regress fatalities_per_capita i.control_dummy i.illegal_dummy weighted_effective weighted_medical
+
+//exporting the sensitivity table from stata into a latex document for visual purposes
+esttab using sensitivity.tex, cells(b(star fmt(7)) se(par fmt(6))) legend label title(Sensitivity Table) varlabels(_cons Constant) stats(r2 df_r, fmt(4 2) label(R-Squared DF))
+
+
+
+
