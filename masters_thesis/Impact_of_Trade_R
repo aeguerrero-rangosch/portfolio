@@ -1,0 +1,635 @@
+---
+title: "Masters Thesis"
+author: "Alessandra Guerrero-Rangosch"
+date: "June 7th, 2021"
+output:
+  pdf_document: default
+word_document: default
+html_document:
+  df_print: paged
+---
+
+Setting up the environment and document:
+
+```{r setup, include=FALSE}
+# Set up RMarkdown specifications:
+knitr::opts_chunk$set(echo = TRUE, results = "show", message=FALSE, warning=FALSE)
+```
+
+```{r, results ='hide'}
+# Remove all data, values, functions to clean environment:
+if(!is.null(dev.list())) dev.off()
+cat("\014")
+rm(list = ls())
+```
+
+```{r}
+library(foreign)
+library(tidyverse)
+library(dplyr)
+library(tinytex)
+library(jtools)
+library(huxtable)
+library(summarytools)
+library(ggstance)
+library(knitr)
+library(lemon)        
+library(lubridate)    
+library(ggplot2)      
+library(plm)          
+library(margins)      
+library(coefplot)     
+library(mice)         
+library(gplots)
+library(lmtest)
+library(pastecs)
+library(VIM)
+library(lattice)
+library(nlme)
+library(ggpubr)
+library(rstatix)
+library(vars)
+library(mFilter)
+library(tseries)
+library(TSstudio)
+library(forecast)
+library(tidyverse)
+```
+
+```{r, results ='hide', message = FALSE}
+knit_print.data.frame <- lemon_print
+
+st_options(plain.ascii = FALSE, style = "rmarkdown")
+st_css()
+```
+
+Data Set-Up, Cleaning, and Restructuring:
+
+```{r}
+data <- read.csv("C:\\Users\\aless\\OneDrive\\Desktop\\Thesis\\data_complete.csv", 
+                 header = TRUE)
+```
+
+```{r}
+data <- data %>% rename(importer_iso = ï..iso)
+```
+
+```{r}
+data_clps <- data %>% group_by(importer_iso, year) %>%
+                      summarize_if(is.numeric,
+                                   mean,
+                                   na.rm = FALSE)
+```
+
+```{r}
+data_clps$nx_a <- data_clps$nx_a+100000
+data_clps$nx_m <- data_clps$nx_a+100000
+data_clps$nx_s <- data_clps$nx_a+100000
+data_clps$fde_a <- data_clps$fde_a+200
+data_clps$gdp_growth <- data_clps$gdp_growth+200
+
+datalog <- data_clps %>% mutate(across(c(where(is.numeric), -year), log))
+
+datalog <- datalog %>% rename_with(~paste0(., "_log"), -c(1:2))
+```
+
+```{r}
+datalog[sapply(datalog, is.infinite)] <- NA
+
+md.pattern(datalog)
+marginplot(datalog[c(1,2)])
+pbox(datalog, pos = 2, selection = "none",
+     xlab = "Year",
+     ylab = "Country",
+     axes = TRUE,
+     labels = FALSE)
+
+imputed_datalog <- mice(datalog,
+                        m = 5, 
+                        maxit = 50,
+                        method = "pmm", 
+                        seed = 500)
+
+datalog_complete <- complete(imputed_datalog, 2)
+```
+
+Descriptive Statistics: 
+
+```{r}
+summary(data_clps, digits = 3)
+
+options(scipen = 100)
+descriptives <- stat.desc(data_clps, basic = F)
+print(descriptives)
+```
+
+Empirical Analysis:
+
+```{r}
+ols.1 <- plm(emp_a_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log,
+              data = datalog_complete, 
+              index = c("importer_iso", "year"),
+              model = "pooling")
+summary(ols.1)
+
+ols.2 <- plm(emp_m_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log,
+              data = datalog_complete, 
+              index = c("importer_iso", "year"),
+              model = "pooling")
+summary(ols.2)
+
+ols.3 <- plm(emp_s_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log,
+              data = datalog_complete, 
+              index = c("importer_iso", "year"),
+              model = "pooling")
+summary(ols.3)
+```
+
+```{r}
+fixed.1 <- plm(emp_a_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log,
+              data = datalog_complete, 
+              index = c("importer_iso", "year"), 
+              model = "within")
+summary(fixed.1)
+
+fixed.2 <- plm(emp_m_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log,
+              data = datalog_complete, 
+              index = c("importer_iso", "year"), 
+              model = "within")
+summary(fixed.2)
+
+fixed.3 <- plm(emp_s_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log,
+              data = datalog_complete, 
+              index = c("importer_iso", "year"), 
+              model = "within")
+summary(fixed.3)
+```
+
+```{r}
+random.1 <- plm(emp_a_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log,
+              data = datalog_complete, 
+              index = c("importer_iso", "year"), 
+              model = "random")
+summary(random.1)
+
+random.2 <- plm(emp_m_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log,
+              data = datalog_complete, 
+              index = c("importer_iso", "year"), 
+              model = "random")
+summary(random.2)
+
+random.3 <- plm(emp_s_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log,
+              data = datalog_complete, 
+              index = c("importer_iso", "year"), 
+              model = "random")
+summary(random.3)
+```
+
+```{r}
+fixef(fixed.1)
+fixef(fixed.2)
+fixef(fixed.3)
+
+pFtest(fixed.1, ols.1)
+pFtest(fixed.2, ols.2)
+pFtest(fixed.3, ols.3)
+```
+
+```{r}
+phtest(fixed.1, random.1)
+phtest(fixed.2, random.2)
+phtest(fixed.3, random.3)
+```
+
+```{r}
+fixedtime.1 <- plm(emp_a_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log
+                        + factor(year),
+              data = datalog_complete, 
+              index = c("importer_iso", "year"), 
+              model = "within")
+summary(fixedtime.1)
+
+fixedtime.2 <- plm(emp_m_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log
+                        + factor(year),
+              data = datalog_complete, 
+              index = c("importer_iso", "year"), 
+              model = "within")
+summary(fixedtime.2)
+
+fixedtime.3 <- plm(emp_s_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log
+                        + factor(year),
+              data = datalog_complete, 
+              index = c("importer_iso", "year"), 
+              model = "within")
+summary(fixedtime.3)
+```
+
+```{r}
+pFtest(fixedtime.1, fixed.1)
+pFtest(fixedtime.2, fixed.2)
+pFtest(fixedtime.3, fixed.3)
+
+plmtest(fixed.1, c("time"), type = "bp")
+plmtest(fixed.2, c("time"), type = "bp")
+plmtest(fixed.3, c("time"), type = "bp")
+```
+```{r}
+plmtest(ols.1, type = c("bp"))
+plmtest(ols.2, type = c("bp"))
+plmtest(ols.3, type = c("bp"))
+```
+```{r}
+pcdtest(fixed.1, test = c("cd"))
+pcdtest(fixed.2, test = c("cd"))
+pcdtest(fixed.3, test = c("cd"))
+```
+
+```{r}
+pbgtest(fixed.1)
+pbgtest(fixed.2)
+pbgtest(fixed.3)
+```
+
+```{r}
+bptest(emp_a_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log
+                        + factor(importer_iso),
+       data = datalog_complete,
+       studentize = F)
+bptest(emp_m_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log
+                        + factor(importer_iso),
+       data = datalog_complete,
+       studentize = F)
+bptest(emp_s_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log + nx_s_log
+                        + nu_a_log + nu_m_log + nu_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + pdens_log + nat_rents_log + rur_pp_log 
+                        + land_tot_log + gdp_growth_log + crop_prod_log
+                        + merch_trade_log + araland_pp_log
+                        + factor(importer_iso),
+       data = datalog_complete,
+       studentize = F)
+```
+
+```{r}
+coeftest(fixed.1)
+coeftest(fixed.2)
+coeftest(fixed.3)
+
+coeftest(fixed.1, vcovHC)
+coeftest(fixed.2, vcovHC)
+coeftest(fixed.3, vcovHC)
+
+coeftest(fixed.1, vcovHC(fixed.1, method = "arellano"))
+coeftest(fixed.2, vcovHC(fixed.2, method = "arellano"))
+coeftest(fixed.3, vcovHC(fixed.3, method = "arellano"))
+
+coeftest(fixed.1, vcovHC(fixed.1, type = "HC0", method = "arellano"))
+coeftest(fixed.2, vcovHC(fixed.2, type = "HC0", method = "arellano"))
+coeftest(fixed.3, vcovHC(fixed.3, type = "HC0", method = "arellano"))
+```
+
+```{r}
+usa <- datalog_complete %>% filter(importer_iso == "USA")
+chn <- datalog_complete %>% filter(importer_iso == "CHN")
+kor <- datalog_complete %>% filter(importer_iso == "KOR")
+```
+
+```{r}
+plotusa.one <- ggplot(usa, aes(year, exp(emp_a_log))) +
+        geom_point() + 
+        theme_bw() + 
+        labs(x = "Year") + 
+        labs(y = "Employment in Agriculture in the United States") + 
+        geom_smooth()
+print(plotusa.one)
+
+plotusa.two <- ggplot(usa, aes(year, exp(emp_m_log))) +
+        geom_point() + 
+        theme_bw() + 
+        labs(x = "Year") + 
+        labs(y = "Employment in Industry in the United States") + 
+        geom_smooth()
+print(plotusa.two)
+
+plotusa.three <- ggplot(usa, aes(year, exp(emp_s_log))) +
+        geom_point() + 
+        theme_bw() + 
+        labs(x = "Year") + 
+        labs(y = "Employment in Services in the United States") + 
+        geom_smooth()
+print(plotusa.three)
+```
+```{r}
+plotchn.one <-  ggplot(chn, aes(year, exp(emp_a_log))) +
+        geom_point() + 
+        theme_bw() + 
+        labs(x = "Year") + 
+        labs(y = "Employment in Agriculture in China") + 
+        geom_smooth()
+print(plotchn.one)
+
+plotchn.two <-  ggplot(chn, aes(year, exp(emp_m_log))) +
+        geom_point() + 
+        theme_bw() + 
+        labs(x = "Year") + 
+        labs(y = "Employment in Industry in China") + 
+        geom_smooth()
+print(plotchn.two)
+
+plotchn.three <-  ggplot(chn, aes(year, exp(emp_s_log))) +
+        geom_point() + 
+        theme_bw() + 
+        labs(x = "Year") + 
+        labs(y = "Employment in Services in China") + 
+        geom_smooth()
+print(plotchn.three)
+```
+
+```{r}
+plotkor.one <- ggplot(kor, aes(year, exp(emp_a_log))) +
+        geom_point() + 
+        theme_bw() + 
+        labs(x = "Year") + 
+        labs(y = "Employment in Agriculture in South Korea") + 
+        geom_smooth()
+print(plotkor.one)
+
+plotkor.two <- ggplot(kor, aes(year, exp(emp_m_log))) +
+        geom_point() + 
+        theme_bw() + 
+        labs(x = "Year") + 
+        labs(y = "Employment in Industry in South Korea") + 
+        geom_smooth()
+print(plotkor.two)
+
+plotkor.three <- ggplot(kor, aes(year, exp(emp_s_log))) +
+        geom_point() + 
+        theme_bw() + 
+        labs(x = "Year") + 
+        labs(y = "Employment in Services in South Korea") + 
+        geom_smooth()
+print(plotkor.three)
+```
+
+```{r}
+usa <- usa[, -c(1, 9:11, 21:41, 45:53, 57, 60:61, 63, 65:67, 70:72, 74:74, 77:79, 81:85)]
+chn <- chn[, -c(1, 9:11, 21:41, 45:53, 57, 60:61, 63, 65:67, 70:72, 74:74, 77:79, 81:85)]
+kor <- kor[, -c(1, 9:11, 21:41, 45:53, 57, 60:61, 63, 65:67, 70:72, 74:74, 77:79, 81:85)]
+```
+
+```{r}
+library(caret)
+library(dynlm)
+
+usats.1 <- dynlm(emp_a_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + rur_pp_log +L(emp_a_log,1) + L(emp_a_log,2), data = usa )
+summary(usats.1)
+
+usats.2 <- dynlm(emp_m_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + merch_trade_log +L(emp_a_log,1) + L(emp_a_log,2), data = usa )
+summary(usats.2)
+
+usats.3 <- dynlm(emp_s_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + merch_trade_log +L(emp_a_log,1) + L(emp_a_log,2), data = usa )
+summary(usats.3)
+
+usafit.1 <- predict(usats.1)
+usaplot.1 <- plot(usa$emp_a_log,type="l",col="black",panel.first=grid(), xaxt="n",main="Actual vs Predicted, by Year")
+axis(1, at = seq(0, 24, by = 1), las=2,
+     ylab = "Employment in Agriculture",
+     xlab = "Year Beginning at 1995")
+lines(usafit.1,col="red")
+lines(usa$emp_a_log, col = "black")
+
+usafit.2 <- predict(usats.2)
+usaplot.2 <- plot(usa$emp_m_log,type="l",col="black",panel.first=grid(), xaxt="n",main="Actual vs Predicted, by Year")
+axis(1, at = seq(0, 24, by = 1), las=2,
+ylab = "Employment in Industry")
+lines(usafit.2,col="red")
+lines(usa$emp_m_log, col = "black")
+
+usafit.3 <- predict(usats.3)
+usaplot.3 <- plot(usa$emp_s_log,type="l",col="black",panel.first=grid(), xaxt="n",main="Actual vs Predicted, by Year")
+axis(1, at = seq(0, 24, by = 1), las=2)
+lines(usafit.3,col="red")
+lines(usa$emp_s_log, col = "black")
+```
+
+```{r}
+chnts.1 <- dynlm(emp_a_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + merch_trade_log +L(emp_a_log,1) + L(emp_a_log,2), data = chn)
+summary(chnts.1)
+
+chnts.2 <- dynlm(emp_m_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + merch_trade_log +L(emp_a_log,1) + L(emp_a_log,2), data = chn)
+summary(chnts.2)
+
+chnts.3 <- dynlm(emp_s_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + merch_trade_log +L(emp_a_log,1) + L(emp_a_log,2), data = chn)
+summary(chnts.3)
+
+chnfit.1 <- predict(chnts.1)
+plot(chn$emp_a_log,type="l",col="black",panel.first=grid(), xaxt="n",main="Actual vs Predicted, by Year")
+axis(1, at = seq(0, 24, by = 1), las=2,
+     ylab = "Employment in Agriculture",
+     xlab = "Year Beginning at 1995")
+lines(chnfit.1,col="red")
+lines(chn$emp_a_log, col = "black")
+
+chnfit.2 <- predict(chnts.2)
+plot(chn$emp_m_log,type="l",col="black",panel.first=grid(), xaxt="n",main="Actual vs Predicted, by Year")
+axis(1, at = seq(0, 24, by = 1), las=2,
+ylab = "Employment in Industry")
+lines(chnfit.2,col="red")
+lines(chn$emp_m_log, col = "black")
+
+chnfit.3 <- predict(chnts.3)
+plot(chn$emp_s_log,type="l",col="black",panel.first=grid(), xaxt="n",main="Actual vs Predicted, by Year")
+axis(1, at = seq(0, 24, by = 1), las=2)
+lines(chnfit.3,col="red")
+lines(chn$emp_s_log, col = "black")
+```
+
+```{r}
+korts.1 <- dynlm(emp_a_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_m_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + merch_trade_log +L(emp_a_log,1) + L(emp_a_log,2), data = kor)
+summary(korts.1)
+
+korts.2 <- dynlm(emp_m_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + merch_trade_log +L(emp_a_log,1) + L(emp_a_log,2), data = kor )
+summary(korts.2)
+
+korts.3 <- dynlm(emp_s_log ~ bts_a_log + bts_m_log + bts_s_log 
+                        + p_a_log + p_m_log + p_s_log
+                        + nx_a_log + nx_s_log
+                        + fde_a_log + fde_m_log + fde_s_log
+                        + merch_trade_log +L(emp_a_log,1) + L(emp_a_log,2), data = kor )
+summary(korts.3)
+
+korfit.1 <- predict(korts.1)
+plot(kor$emp_a_log,type="l",col="black",panel.first=grid(), xaxt="n",main="Actual vs Predicted, by Year")
+axis(1, at = seq(0, 24, by = 1), las=2,
+     ylab = "Employment in Agriculture",
+     xlab = "Year Beginning at 1995")
+lines(korfit.1,col="red")
+lines(kor$emp_a_log, col = "black")
+
+korfit.2 <- predict(korts.2)
+plot(kor$emp_m_log,type="l",col="black",panel.first=grid(), xaxt="n",main="Actual vs Predicted, by Year")
+axis(1, at = seq(0, 24, by = 1), las=2,
+ylab = "Employment in Industry")
+lines(korfit.2,col="red")
+lines(kor$emp_m_log, col = "black")
+
+korfit.3 <- predict(korts.3)
+plot(kor$emp_s_log,type="l",col="black",panel.first=grid(), xaxt="n",main="Actual vs Predicted, by Year")
+axis(1, at = seq(0, 24, by = 1), las=2)
+lines(korfit.3,col="red")
+lines(kor$emp_s_log, col = "black")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
