@@ -9,6 +9,7 @@ University of Chicago
 ### Technical Skills
 
 **Programming Languages**: Python, R, SQL, Matlab, STATA.
+
 **Technologies**: Tableau, Power BI, Mathematica, Excel, Git.
 
 ### Work Experience
