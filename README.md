@@ -1,10 +1,10 @@
 # Data Analyst
 
 ### Education
-Tilburg University
+**Tilburg University**, *Tilburg, The Netherlands*
 - Master of Science in Economics with Specialization in Data Science - October 2021
 
-University of Chicago
+**University of Chicago**, *Chicago, Illinois*
 - Bachelor of Arts, Economics - June 2020
 
 ### Technical Skills
