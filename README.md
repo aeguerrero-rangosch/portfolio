@@ -3,6 +3,7 @@
 ### Education
 Tilburg University
 - Master of Science in Economics with Specialization in Data Science - October 2021
+
 University of Chicago
 - Bachelor of Arts, Economics - June 2020
 
