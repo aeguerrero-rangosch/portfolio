@@ -1,0 +1,845 @@
+/*******************************************************************************
+*   File name:		randomforests_airbnb.do
+*  	Author:			Alessandra Guerrero
+*
+*	Inputs:			airbnb_data.csv
+*	
+*	Outputs:		Predicted "review_scores_rating" variables
+*	
+*	Description: 	Code for Airbnb Score Prediction Model
+*					
+*******************************************************************************/
+
+********************************************************************************
+********************************************************************************
+//								OLS REGRESSIONS								  //
+********************************************************************************
+********************************************************************************
+
+***********************
+//LOADING DATA
+***********************
+
+version 15.1
+clear all
+set more off
+cap log close
+
+import delimited "C:\Users\aless\OneDrive\Desktop\Data Construction\3\data\airbnb_data.csv"
+
+***********************
+//CLEANING FOR OLS
+***********************
+
+*KEEP IMPORTANT VARIABLES
+keep id review_scores_rating summary space description neighborhood_overview ///
+		transit host_response_time sex race age 							 ///
+		calculated_host_listings_count property_type room_type accommodates	 ///
+		bathrooms bedrooms beds bed_type amenities square_feet price		 ///
+		security_deposit cleaning_fee extra_people number_of_reviews		 ///
+		reviews_per_month access interaction house_rules host_is_superhost 	 ///
+		instant_bookable indicator host_response_rate state										
+
+rename indicator data_class
+
+drop if missing(review_scores_rating) & data_class == 1 
+sort data_class id
+
+*REPLACE NONENTRIES
+replace transit = "N/A" if transit == ""
+replace neighborhood_overview = "N/A" if neighborhood_overview == ""
+replace summary = "N/A" if summary == ""
+replace amenities = "N/A" if amenities == "}"
+replace amenities = "N/A" if amenities == "{}"
+replace access = "N/A" if access == ""
+replace access = "N/A" if access == "NA"
+replace interaction = "N/A" if interaction == ""	
+replace interaction = "N/A" if interaction == "NA"
+replace space = "N/A" if space == ""
+replace square_feet = "N/A" if square_feet == "NA"
+replace house_rules = "N/A" if house_rules == ""
+replace house_rules = "N/A" if house_rules == "NA"
+
+*ABSOLUTE VALUES AND NONNEGATIVES
+replace bedroom = abs(bedroom)
+replace bathroom = abs(bathroom) 
+replace security_deposit = abs(security_deposit)
+replace cleaning_fee = abs(cleaning_fee)
+replace bathrooms = 1 if bathrooms == 0
+replace security_deposit = 0 if security_deposit == .
+
+*CREATE MISSING DUMMIES ("HAS" VARIABLES)
+gen amenities_missing = 0 if amenities == "N/A"
+replace amenities_missing = 1 if amenities_missing == .
+rename amenities_missing has_amenities	
+
+gen access_missing = 0 if access == "N/A"
+replace access_missing = 1 if access_missing == .
+rename access_missing has_access	
+	
+gen neighborhood_missing = 0 if neighborhood_overview == "N/A"
+replace neighborhood_missing = 1 if neighborhood_missing == .
+rename neighborhood_missing has_hood
+
+gen transit_missing = 0 if transit == "N/A"
+replace transit_missing = 1 if transit_missing == .
+rename transit_missing has_transit
+
+gen summary_missing = 0 if summary == "N/A"
+replace summary_missing = 1 if summary_missing == .
+rename summary_missing has_summary
+
+gen square_feet_missing = 0 if square_feet == "N/A"
+replace square_feet_missing = 1 if square_feet_missing == .
+rename square_feet_missing has_sqfeet
+
+gen space_missing = 0 if space == "N/A"
+replace space_missing = 1 if space_missing == .
+rename space_missing has_space
+
+gen rules_missing = 0 if house_rules == "N/A"
+replace rules_missing = 1 if rules_missing == .
+rename rules_missing has_rules
+
+*CREATE LENGTH VARIABLES
+gen amenities_length = length(amenities)
+replace amenities_length = 0 if amenities_length == 3
+
+gen neighborhood_length = length(neighborhood_overview)
+replace neighborhood_length = 0 if neighborhood_length == 3
+
+gen transit_length = length(transit)
+replace transit_length = 0 if transit_length == 3
+	
+gen rules_length = length(house_rules)
+replace rules_length = 0 if rules_length == 3
+
+*CREATE AND CLEAN CATEGORICALS
+egen host_response_cat = group(host_response_time) 
+egen sex_cat = group(sex)
+egen race_cat = group(race) 
+egen age_cat = group(age)
+egen property_type_cat = group(property_type) 
+egen room_type_cat = group(room_type)
+egen bed_type_cat = group(bed_type)
+
+replace host_response_cat = 2 if host_response_cat == 1
+
+gen sex_missing = 0 if sex_cat == 6
+replace sex_missing = 1 if sex_cat != 6
+rename sex_missing sex_known
+
+gen race_missing = 0 if race_cat == 5
+replace race_missing = 1 if race_cat != 5
+rename race_missing race_known
+
+gen age_missing = 0 if age_cat == 5
+replace age_missing = 1 if age_cat != 5
+rename age_missing age_known
+
+*CREATE "GOOD WORDS" VARIABLES  (remember host_rules, geocoding lat lon, interaction)
+egen modern = noccur(summary), string("modern")
+egen cozy = noccur(summary), string("cozy")
+egen bright = noccur(summary), string("bright")
+egen perfect = noccur(summary), string("perfect")
+egen vibrant = noccur(summary), string("vibrant")
+egen charming = noccur(summary), string("charming")
+egen location = noccur(summary), string("location")
+egen beautiful = noccur(summary), string("beautiful")
+egen private = noccur(summary), string("private")
+egen furnished = noccur(summary), string("furnished")
+egen heart = noccur(summary), string("heart")
+egen spacious = noccur(summary), string("spacious")
+egen quiet = noccur(summary), string("quiet")
+egen new = noccur(summary), string("new")
+egen renovated = noccur(summary), string("renovated")
+egen relax = noccur(summary), string("relax")
+egen lovely = noccur(summary), string("lovely")
+egen luxury = noccur(summary), string("luxury")
+egen comfort = noccur(summary), string("comfort")
+egen walking_distance = noccur(summary), string("walking distance")
+egen walk = noccur(summary), string("walk")
+egen restaurants = noccur(summary), string("restaurants")
+egen clean = noccur(summary), string("clean")
+egen centrally_located = noccur(summary), string("centrally located")
+gen summary_good_words = relax + lovely + renovated + luxury + comfort + 			///
+	walking_distance + walk + restaurants + clean + centrally_located + quiet + 	///
+	modern + cozy + bright + perfect + vibrant + charming + location + beautiful + 	///
+	private + furnished + heart + spacious + new 
+drop modern cozy quiet bright perfect vibrant charming location beautiful			///
+	private furnished heart spacious new renovated relax lovely luxury comfort 		///
+	walking_distance walk restaurants clean centrally_located 
+
+egen historic = noccur(neighborhood_overview), string("historic")
+egen friendly = noccur(neighborhood_overview), string("friendly")
+egen safe = noccur(neighborhood_overview), string("safe")
+egen quiet = noccur(neighborhood_overview), string("quiet")
+egen diverse = noccur(neighborhood_overview), string("diverse")
+egen accessible = noccur(neighborhood_overview), string("accessible")
+egen easy_access = noccur(neighborhood_overview), string("easy access")
+egen close_to = noccur(neighborhood_overview), string("close to")
+egen walking_distance = noccur(neighborhood_overview), string("walking distance")
+egen restaurant = noccur(neighborhood_overview), string("restaurant")
+egen restaurants = noccur(neighborhood_overview), string("restaurants")
+egen convenient = noccur(neighborhood_overview), string("convenient")
+egen desirable = noccur(neighborhood_overview), string("desirable")
+egen bars = noccur(neighborhood_overview), string("bars")
+egen minutes = noccur(neighborhood_overview), string("minutes")
+egen centrally_located = noccur(neighborhood_overview), string("centrally located")
+egen center = noccur(neighborhood_overview), string("center")
+egen community = noccur(neighborhood_overview), string("community")
+egen proximity = noccur(neighborhood_overview), string("proximity")
+egen lively = noccur(neighborhood_overview), string("lively")
+gen neighborhood_good_words = historic + friendly + safe + quiet + diverse + 		///
+	accessible + easy_access + close_to + walking_distance + restaurant +			///
+	restaurants + convenient + desirable + bars + centrally_located + center + 		///
+	community + proximity + lively 
+drop historic friendly safe quiet diverse accessible easy_access close_to 			///
+	walking_distance restaurant restaurants convenient desirable bars 				///
+	minutes centrally_located center community proximity lively 
+
+egen transport = noccur(transit), string("transport")
+egen minutes = noccur(transit), string("minutes")
+egen block = noccur(transit), string("block")
+egen easy = noccur(transit), string("easy")
+egen downtown = noccur(transit), string("downtown")
+egen bus = noccur(transit), string("bus")
+egen train = noccur(transit), string("train")
+egen accessible = noccur(transit), string("accessible")
+egen walk = noccur(transit), string("walk")
+egen located = noccur(transit), string("located")
+egen close = noccur(transit), string("close")
+egen subway = noccur(transit), string("subway")
+egen access_2 = noccur(transit), string("access")
+egen easy_access = noccur(transit), string("easy access")
+egen conveniently = noccur(transit), string("conveniently")
+egen walking_distance = noccur(transit), string("walking distance")
+egen stops = noccur(transit), string("stops")
+egen centrally_located = noccur(transit), string("centrally located")
+egen everywhere = noccur(transit), string("everywhere")
+egen public = noccur(transit), string("public")
+egen anywhere = noccur(transit), string("anywhere")
+gen transit_good_words = transport + minutes + block + easy + downtown + 			///
+	bus + train + accessible + walk + close + subway + located + access_2 +			///
+	conveniently + easy_access + walking_distance + stops + everywhere + 			///
+	centrally_located + public + anywhere 
+drop transport minutes block easy downtown bus train accessible walk located 		///
+	close subway access_2 conveniently easy_access walking_distance stops			///
+	centrally_located everywhere public anywhere 
+	
+egen entire = noccur(access), string("entire")
+egen whole = noccur(access), string("whole")
+egen kitchen = noccur(access), string("kitchen")
+egen wifi = noccur(access), string("wifi")
+egen full = noccur(access), string("full")
+egen all = noccur(access), string("all")
+egen coffee = noccur(access), string("coffee")
+egen private = noccur(access), string("private")
+egen everything = noccur(access), string("everything")
+egen any = noccur(access), string("any")
+egen yourself = noccur(access), string("yourself")
+egen living = noccur(access), string("living")
+egen backyard = noccur(access), string("backyard")
+egen laundry = noccur(access), string("laundry")
+egen total = noccur(access), string("total")
+gen access_good_words = entire + whole + kitchen + wifi + full + all + coffee + 	///
+	private + everything + any + yourself + living + backyard + laundry + total 
+drop entire whole kitchen wifi full all coffee private everything any yourself		///
+	living backyard laundry total 
+ 
+egen we_are_here = noccur(interaction), string("we are here")
+egen i_am_here = noccur(interaction), string("i am here")
+egen will_have = noccur(interaction), string("will have")
+egen available = noccur(interaction), string("available")
+egen always = noccur(interaction), string("always")
+egen help = noccur(interaction), string("help")
+egen as_needed = noccur(interaction), string("as needed")
+egen wanted = noccur(interaction), string("wanted")
+egen as_much_as = noccur(interaction), string("as much as")
+egen privacy = noccur(interaction), string("privacy")
+egen assistance = noccur(interaction), string("assistance")
+egen accessible = noccur(interaction), string("accessible")
+egen answer = noccur(interaction), string("answer")
+egen recommendations = noccur(interaction), string("recommendation")
+egen information = noccur(interaction), string("information")
+egen like = noccur(interaction), string("like")
+egen greet = noccur(interaction), string("greet")
+egen need = noccur(interaction), string("need")
+gen interaction_good_words = we_are_here + i_am_here + will_have + available		///
+	+ always + help + as_needed + wanted + as_much_as + privacy + assistance + 		///
+	accessible + answer + recommendations + information + like + greet + need 		
+drop we_are_here i_am_here will_have available always help as_needed 				///
+	wanted as_much_as privacy assistance accessible answer recommendations			///
+	information like greet need 
+
+egen cleaning_fees  = noccur(house_rules), string("cleaning fee")
+egen loudness = noccur(house_rules), string("loudness")
+egen absolutely = noccur(house_rules), string("absolutely")
+egen review = noccur(house_rules), string("review")
+egen cant = noccur(house_rules), string("cant")
+egen if_you = noccur(house_rules), string("if you")
+egen will = noccur(house_rules), string("will")
+egen must = noccur(house_rules), string("must")
+egen you_will = noccur(house_rules), string("you must")
+egen immediately = noccur(house_rules), string("immediately")
+egen noise = noccur(house_rules), string("noise")
+egen absolutely_no = noccur(house_rules), string("absolutely no")
+egen strict = noccur(house_rules), string("strict")
+egen expect = noccur(house_rules), string("expect")
+egen must_be = noccur(house_rules), string("must_be")
+egen strictly = noccur(house_rules), string("strictly")
+egen not_permitted = noccur(house_rules), string("not_permitted")
+egen no_guests = noccur(house_rules), string("no guests")
+egen no_loud = noccur(house_rules), string("no loud")
+gen inflexibility = cleaning_fee + loudness + absolutely + review + cant + 			///
+	if_you + will + must + you_will + immediately + noise + absolutely_no + strict  ///
+	+ expect + must_be + strictly + not_permitted + no_guests + no_loud 
+drop cleaning_fees loudness absolutely review cant if_you will must you_will		///
+	immediately noise absolutely_no strict expect must_be strictly not_permitted 	///
+	no_guests no_loud 
+
+*EXTRA VARIABLES(?)
+gen state_CA = 0
+	replace state_CA = 1 if state == "CA"
+gen property_house = 0
+	replace property_house = 1 if property_type == "House"
+gen entirehouse = 0
+	replace entirehouse = 1 if room_type == "Entire home/apt"
+gen realbed = 0
+	replace realbed = 1 if bed_type == "Real Bed"
+gen good_host_time = 0
+	replace good_host_time = 1 if host_response_time == "within a few hours"
+	replace good_host_time = 1 if host_response_time == "within an hour"
+
+***********************
+//OLS MODELS & CHECK
+***********************
+
+*MODEL #1***********************************************************************************************
+
+set seed 4315442
+gen random = runiform()
+gen cross_validate_indicator = 0 if random < 0.8
+replace cross_validate_indicator = 1 if random > 0.2
+
+regress review_scores_rating calculated_host_listings_count number_of_reviews reviews_per_month extra_people bedrooms ///
+		bathrooms beds amenities_length transit_length rules_length ///
+		i.host_response_cat i.sex_cat i.age_cat i.race_cat i.property_type_cat i.room_type_cat i.bed_type_cat ///
+		i.host_is_superhost i.instant_bookable i.has_access##i.(has_hood has_transit has_space has_amenities has_rules)   ///
+		i.sex_known i.age_known i.race_known ///
+	if cross_validate_indicator == 0 & data_class == 1
+
+predict review_scores_rating_predicted
+br
+
+regress review_scores_rating_predicted review_scores_rating if cross_validate_indicator == 1 & data_class == 1
+
+crossfold regress review_scores_rating calculated_host_listings_count number_of_reviews reviews_per_month extra_people bedrooms ///
+		bathrooms beds amenities_length transit_length rules_length ///
+		i.host_response_cat i.sex_cat i.age_cat i.race_cat i.property_type_cat i.room_type_cat i.bed_type_cat ///
+		i.host_is_superhost i.instant_bookable i.has_access##i.(has_hood has_transit has_space has_amenities has_rules)   ///
+		i.sex_known i.age_known i.race_known ///
+		, r2 k(10) 
+
+preserve 
+keep id review_scores_rating_predicted
+export delimited "\Users\aless\OneDrive\Desktop\Data Construction\pset_3\what"
+restore
+
+drop cross_validate_indicator random review_scores_rating_predicted 
+
+*W PRICE CUTS******************************************************************************************
+
+summarize number_of_reviews, detail
+	gen high_reviews = number_of_reviews >= 24
+	gen high_reviews2 = number_of_reviews >= 56
+	gen high_reviews3 = number_of_reviews >= 85
+summarize price, detail
+	gen price_high = price >= 149
+	gen price_high2 = price >= 199
+	gen price_high3 = price >= 250
+egen p90 = pctile(price), p(90)
+egen p99 = pctile(price), p(99)
+
+preserve
+keep if data_class == 1
+pctile pct = price, nq(10) genp(percent)
+restore
+
+regress review_scores_rating calculated_host_listings_count number_of_reviews reviews_per_month extra_people bedrooms ///
+		bathrooms beds amenities_length transit_length rules_length ///
+		i.host_response_cat i.sex_cat i.age_cat i.race_cat i.property_type_cat i.room_type_cat i.bed_type_cat ///
+		i.host_is_superhost i.instant_bookable i.has_access##1.(has_hood has_transit has_space has_amenities has_rules)   ///
+		state_CA high_reviews high_reviews2 high_reviews3 price_high price_high2 price_high3 i.sex_known i.race_known i.age_known ///
+		if data_class == 1 & price <= 159
+		
+predict review_scores_rating_predicted
+br
+
+regress review_scores_rating_predicted review_scores_rating if data_class == 1 & price >= 199
+
+crossfold regress correctedreviews correctedcount correctednumber_reviews correctedper_month correctedextra correctedbedrooms ///
+		correctedbathrooms correctedbeds correctedamenities_length correctedtransit_length correctedrules_length ///
+		i.host_response_cat i.sex_cat i.age_cat i.race_cat i.property_type_cat i.room_type_cat i.bed_type_cat ///
+		i.host_is_superhost i.instant_bookable i.has_access##1.(has_hood has_transit has_space has_amenities has_rules)   ///
+		state_CA high_reviews high_reviews2 high_reviews3 price_high price_high2 price_high3 i.sex_known i.age_known i.race_known, r2 k(10) 
+
+preserve 
+keep if data_class == 3
+keep id review_scores_rating_predicted
+export delimited "\Users\aless\OneDrive\Desktop\Data Construction\pset_3\prediction_2-1"
+restore
+
+********************************************************************************
+********************************************************************************
+//								RANDOM FORESTS								  //
+********************************************************************************
+********************************************************************************
+***********************
+//LOADING DATA
+***********************
+
+clear all
+
+version 15.1
+set more off
+cap log close
+
+import delimited "C:\Users\aless\OneDrive\Desktop\Data Construction\3\data\airbnb_data.csv"
+
+***********************
+//CLEANING FOR FORESTS
+***********************
+
+*KEEP IMPORTANT VARIABLES
+
+keep id review_scores_rating summary space description neighborhood_overview ///
+		transit host_response_time sex race age 							 ///
+		calculated_host_listings_count property_type room_type accommodates	 ///
+		bathrooms bedrooms beds bed_type amenities square_feet price		 ///
+		security_deposit cleaning_fee extra_people number_of_reviews		 ///
+		reviews_per_month access interaction house_rules host_is_superhost 	 ///
+		instant_bookable indicator host_response_rate state										
+
+rename indicator data_class
+
+*REPLACE NONENTRIES
+replace transit = "N/A" if transit == ""
+replace neighborhood_overview = "N/A" if neighborhood_overview == ""
+replace summary = "N/A" if summary == ""
+replace amenities = "N/A" if amenities == "}"
+replace amenities = "N/A" if amenities == "{}"
+replace access = "N/A" if access == ""
+replace access = "N/A" if access == "NA"
+replace interaction = "N/A" if interaction == ""	
+replace interaction = "N/A" if interaction == "NA"
+replace space = "N/A" if space == ""
+replace square_feet = "N/A" if square_feet == "NA"
+replace house_rules = "N/A" if house_rules == ""
+replace house_rules = "N/A" if house_rules == "NA"
+
+*ABSOLUTE VALUES AND NONNEGATIVES
+replace bedroom = abs(bedroom)
+replace bathroom = abs(bathroom) 
+replace security_deposit = abs(security_deposit)
+replace cleaning_fee = abs(cleaning_fee)
+replace bathrooms = 1 if bathrooms == 0
+replace security_deposit = 0 if security_deposit == .
+
+*CREATE MISSING DUMMIES ("HAS" VARIABLES)
+gen amenities_missing = 0 if amenities == "N/A"
+replace amenities_missing = 1 if amenities_missing == .
+rename amenities_missing has_amenities	
+
+gen access_missing = 0 if access == "N/A"
+replace access_missing = 1 if access_missing == .
+rename access_missing has_access	
+	
+gen neighborhood_missing = 0 if neighborhood_overview == "N/A"
+replace neighborhood_missing = 1 if neighborhood_missing == .
+rename neighborhood_missing has_hood
+
+gen transit_missing = 0 if transit == "N/A"
+replace transit_missing = 1 if transit_missing == .
+rename transit_missing has_transit
+
+gen summary_missing = 0 if summary == "N/A"
+replace summary_missing = 1 if summary_missing == .
+rename summary_missing has_summary
+
+gen square_feet_missing = 0 if square_feet == "N/A"
+replace square_feet_missing = 1 if square_feet_missing == .
+rename square_feet_missing has_sqfeet
+
+gen space_missing = 0 if space == "N/A"
+replace space_missing = 1 if space_missing == .
+rename space_missing has_space
+
+gen rules_missing = 0 if house_rules == "N/A"
+replace rules_missing = 1 if rules_missing == .
+rename rules_missing has_rules
+
+*CREATE LENGTH VARIABLES
+gen amenities_length = length(amenities)
+replace amenities_length = 0 if amenities_length == 3
+
+gen neighborhood_length = length(neighborhood_overview)
+replace neighborhood_length = 0 if neighborhood_length == 3
+
+gen transit_length = length(transit)
+replace transit_length = 0 if transit_length == 3
+	
+gen rules_length = length(house_rules)
+replace rules_length = 0 if rules_length == 3		
+		
+*CREATE AND CLEAN CATEGORICALS WITH UNKNOWNS
+replace host_response_time = "UNKNOWN" if host_response_time == "N/A"
+replace sex = "UNKNOWN" if sex == "Unknown"
+replace race = "UNKNOWN" if race == "Unknown"
+replace age = "UNKNOWN" if age == "Unknown"
+
+egen host_response_cat = group(host_response_time)
+egen sex_cat = group(sex)
+egen race_cat = group(race)
+egen age_cat = group(age)
+egen property_type_cat = group(property_type) 
+egen room_type_cat = group(room_type)
+egen bed_type_cat = group(bed_type)	
+
+replace state = "NY" if state == "ny"
+replace state = "NY" if state == "Ny"
+replace state = "NY" if state == "New York"
+replace state = "IL" if state == "Il"
+
+*CREATE "GOOD WORDS" VARIABLES  (remember host_rules, geocoding lat lon, interaction)
+egen modern = noccur(summary), string("modern")
+egen cozy = noccur(summary), string("cozy")
+egen bright = noccur(summary), string("bright")
+egen perfect = noccur(summary), string("perfect")
+egen vibrant = noccur(summary), string("vibrant")
+egen charming = noccur(summary), string("charming")
+egen location = noccur(summary), string("location")
+egen beautiful = noccur(summary), string("beautiful")
+egen private = noccur(summary), string("private")
+egen furnished = noccur(summary), string("furnished")
+egen heart = noccur(summary), string("heart")
+egen spacious = noccur(summary), string("spacious")
+egen quiet = noccur(summary), string("quiet")
+egen new = noccur(summary), string("new")
+egen renovated = noccur(summary), string("renovated")
+egen relax = noccur(summary), string("relax")
+egen lovely = noccur(summary), string("lovely")
+egen luxury = noccur(summary), string("luxury")
+egen comfort = noccur(summary), string("comfort")
+egen walking_distance = noccur(summary), string("walking distance")
+egen walk = noccur(summary), string("walk")
+egen restaurants = noccur(summary), string("restaurants")
+egen clean = noccur(summary), string("clean")
+egen centrally_located = noccur(summary), string("centrally located")
+gen summary_good_words = relax + lovely + renovated + luxury + comfort + 			///
+	walking_distance + walk + restaurants + clean + centrally_located + quiet + 	///
+	modern + cozy + bright + perfect + vibrant + charming + location + beautiful + 	///
+	private + furnished + heart + spacious + new 
+drop modern cozy quiet bright perfect vibrant charming location beautiful			///
+	private furnished heart spacious new renovated relax lovely luxury comfort 		///
+	walking_distance walk restaurants clean centrally_located 
+
+egen historic = noccur(neighborhood_overview), string("historic")
+egen friendly = noccur(neighborhood_overview), string("friendly")
+egen safe = noccur(neighborhood_overview), string("safe")
+egen quiet = noccur(neighborhood_overview), string("quiet")
+egen diverse = noccur(neighborhood_overview), string("diverse")
+egen accessible = noccur(neighborhood_overview), string("accessible")
+egen easy_access = noccur(neighborhood_overview), string("easy access")
+egen close_to = noccur(neighborhood_overview), string("close to")
+egen walking_distance = noccur(neighborhood_overview), string("walking distance")
+egen restaurant = noccur(neighborhood_overview), string("restaurant")
+egen restaurants = noccur(neighborhood_overview), string("restaurants")
+egen convenient = noccur(neighborhood_overview), string("convenient")
+egen desirable = noccur(neighborhood_overview), string("desirable")
+egen bars = noccur(neighborhood_overview), string("bars")
+egen minutes = noccur(neighborhood_overview), string("minutes")
+egen centrally_located = noccur(neighborhood_overview), string("centrally located")
+egen center = noccur(neighborhood_overview), string("center")
+egen community = noccur(neighborhood_overview), string("community")
+egen proximity = noccur(neighborhood_overview), string("proximity")
+egen lively = noccur(neighborhood_overview), string("lively")
+gen neighborhood_good_words = historic + friendly + safe + quiet + diverse + 		///
+	accessible + easy_access + close_to + walking_distance + restaurant +			///
+	restaurants + convenient + desirable + bars + centrally_located + center + 		///
+	community + proximity + lively 
+drop historic friendly safe quiet diverse accessible easy_access close_to 			///
+	walking_distance restaurant restaurants convenient desirable bars 				///
+	minutes centrally_located center community proximity lively 
+
+egen transport = noccur(transit), string("transport")
+egen minutes = noccur(transit), string("minutes")
+egen block = noccur(transit), string("block")
+egen easy = noccur(transit), string("easy")
+egen downtown = noccur(transit), string("downtown")
+egen bus = noccur(transit), string("bus")
+egen train = noccur(transit), string("train")
+egen accessible = noccur(transit), string("accessible")
+egen walk = noccur(transit), string("walk")
+egen located = noccur(transit), string("located")
+egen close = noccur(transit), string("close")
+egen subway = noccur(transit), string("subway")
+egen access_2 = noccur(transit), string("access")
+egen easy_access = noccur(transit), string("easy access")
+egen conveniently = noccur(transit), string("conveniently")
+egen walking_distance = noccur(transit), string("walking distance")
+egen stops = noccur(transit), string("stops")
+egen centrally_located = noccur(transit), string("centrally located")
+egen everywhere = noccur(transit), string("everywhere")
+egen public = noccur(transit), string("public")
+egen anywhere = noccur(transit), string("anywhere")
+gen transit_good_words = transport + minutes + block + easy + downtown + 			///
+	bus + train + accessible + walk + close + subway + located + access_2 +			///
+	conveniently + easy_access + walking_distance + stops + everywhere + 			///
+	centrally_located + public + anywhere 
+drop transport minutes block easy downtown bus train accessible walk located 		///
+	close subway access_2 conveniently easy_access walking_distance stops			///
+	centrally_located everywhere public anywhere 
+	
+egen entire = noccur(access), string("entire")
+egen whole = noccur(access), string("whole")
+egen kitchen = noccur(access), string("kitchen")
+egen wifi = noccur(access), string("wifi")
+egen full = noccur(access), string("full")
+egen all = noccur(access), string("all")
+egen coffee = noccur(access), string("coffee")
+egen private = noccur(access), string("private")
+egen everything = noccur(access), string("everything")
+egen any = noccur(access), string("any")
+egen yourself = noccur(access), string("yourself")
+egen living = noccur(access), string("living")
+egen backyard = noccur(access), string("backyard")
+egen laundry = noccur(access), string("laundry")
+egen total = noccur(access), string("total")
+gen access_good_words = entire + whole + kitchen + wifi + full + all + coffee + 	///
+	private + everything + any + yourself + living + backyard + laundry + total 
+drop entire whole kitchen wifi full all coffee private everything any yourself		///
+	living backyard laundry total 
+ 
+egen we_are_here = noccur(interaction), string("we are here")
+egen i_am_here = noccur(interaction), string("i am here")
+egen will_have = noccur(interaction), string("will have")
+egen available = noccur(interaction), string("available")
+egen always = noccur(interaction), string("always")
+egen help = noccur(interaction), string("help")
+egen as_needed = noccur(interaction), string("as needed")
+egen wanted = noccur(interaction), string("wanted")
+egen as_much_as = noccur(interaction), string("as much as")
+egen privacy = noccur(interaction), string("privacy")
+egen assistance = noccur(interaction), string("assistance")
+egen accessible = noccur(interaction), string("accessible")
+egen answer = noccur(interaction), string("answer")
+egen recommendations = noccur(interaction), string("recommendation")
+egen information = noccur(interaction), string("information")
+egen like = noccur(interaction), string("like")
+egen greet = noccur(interaction), string("greet")
+egen need = noccur(interaction), string("need")
+gen interaction_good_words = we_are_here + i_am_here + will_have + available		///
+	+ always + help + as_needed + wanted + as_much_as + privacy + assistance + 		///
+	accessible + answer + recommendations + information + like + greet + need 		
+drop we_are_here i_am_here will_have available always help as_needed 				///
+	wanted as_much_as privacy assistance accessible answer recommendations			///
+	information like greet need 
+
+egen cleaning_fees  = noccur(house_rules), string("cleaning fee")
+egen loudness = noccur(house_rules), string("loudness")
+egen absolutely = noccur(house_rules), string("absolutely")
+egen review = noccur(house_rules), string("review")
+egen cant = noccur(house_rules), string("cant")
+egen if_you = noccur(house_rules), string("if you")
+egen will = noccur(house_rules), string("will")
+egen must = noccur(house_rules), string("must")
+egen you_will = noccur(house_rules), string("you must")
+egen immediately = noccur(house_rules), string("immediately")
+egen noise = noccur(house_rules), string("noise")
+egen absolutely_no = noccur(house_rules), string("absolutely no")
+egen strict = noccur(house_rules), string("strict")
+egen expect = noccur(house_rules), string("expect")
+egen must_be = noccur(house_rules), string("must_be")
+egen strictly = noccur(house_rules), string("strictly")
+egen not_permitted = noccur(house_rules), string("not_permitted")
+egen no_guests = noccur(house_rules), string("no guests")
+egen no_loud = noccur(house_rules), string("no loud")
+gen inflexibility = cleaning_fee + loudness + absolutely + review + cant + 			///
+	if_you + will + must + you_will + immediately + noise + absolutely_no + strict  ///
+	+ expect + must_be + strictly + not_permitted + no_guests + no_loud 
+drop cleaning_fees loudness absolutely review cant if_you will must you_will		///
+	immediately noise absolutely_no strict expect must_be strictly not_permitted 	///
+	no_guests no_loud 
+		
+*EXTRA VARIABLES(?)
+summarize number_of_reviews, detail
+	gen high_reviews = number_of_reviews >= 24
+	gen high_reviews2 = number_of_reviews >= 56
+	gen high_reviews3 = number_of_reviews >= 85
+summarize price, detail
+	gen price_high = price >= 198
+	gen price_high2 = price >= 350
+	gen price_high3 = price >=500
+summarize host_response_rate, detail
+	gen fullresponse = host_response_rate >= 0.85
+	gen state_CA = 0
+	replace state_CA = 1 if state == "CA"
+	gen property_house = 0
+	replace property_house = 1 if property_type == "House"
+	gen entirehouse = 0
+	replace entirehouse = 1 if room_type == "Entire home/apt"
+	gen realbed = 0
+	replace realbed = 1 if bed_type == "Real Bed"
+gen good_host_time = 0
+replace good_host_time = 1 if host_response_time == "within a few hours"
+replace good_host_time = 1 if host_response_time == "within an hour"
+		
+***********************
+//FOREST MODELS + CHECK
+***********************
+
+*PARAMETER TUNING
+preserve
+
+keep if data_class == 1
+set seed 201807
+gen u = uniform()
+sort u
+gen out_of_bag_error1 = .
+gen validation_error = .
+gen iter1 = .
+local j = 0
+forvalues i = 20(20)180{
+local j = `j' + 1
+randomforest review_scores_rating calculated_host_listings_count number_of_reviews reviews_per_month extra_people bedrooms ///
+		bathrooms beds amenities_length transit_length rules_length ///
+		host_response_cat sex_cat age_cat race_cat property_type_cat room_type_cat bed_type_cat ///
+		host_is_superhost instant_bookable has_access has_hood has_transit has_space has_amenities has_rules  ///
+		in 1/20000, ///
+	type(reg) iter(`i') numvars(1) //
+	replace iter1 = `i' in `j'
+	replace out_of_bag_error1 = `e(OOB_Error)' in `j'
+	predict p in 20001/39719
+	replace validation_error = `e(RMSE)' in `j'
+	drop p
+}
+
+label var out_of_bag_error1 "Out of Bag Error"
+label var iter1 "Iterations"
+label var validation_error "Validation RMSE"
+scatter out_of_bag_error1 iter1, mcolor(blue) msize(tiny) || ///
+scatter validation_error iter1, mcolor(red) msize(tiny)
+
+restore
+
+preserve
+
+keep if data_class == 1
+set seed 201807
+gen u = uniform()
+sort u
+gen out_of_bag_error1 = .
+gen nvars = .
+gen validation_error = .
+local j = 0
+forvalues i = 20(20)100{
+local j = `j' + 1
+randomforest review_scores_rating calculated_host_listings_count number_of_reviews reviews_per_month extra_people bedrooms ///
+		bathrooms beds amenities_length transit_length rules_length ///
+		host_response_cat sex_cat age_cat race_cat property_type_cat room_type_cat bed_type_cat ///
+		host_is_superhost instant_bookable has_access has_hood has_transit has_space has_amenities has_rules  ///
+		in 1/20000, ///
+	type(reg) iter(160) numvars(`i') //
+	replace nvars = `i' in `j'
+	replace out_of_bag_error1 = `e(OOB_Error)' in `j'
+	predict p in 20001/39719
+	replace validation_error = `e(RMSE)' in `j'
+	drop p
+}
+
+label var out_of_bag_error1 "Out of Bag Error"
+label var validation_error "Validation RMSE"
+label var nvars "Number of Variables Randomly Selected at Each Split"
+scatter out_of_bag_error1 nvars, mcolor(blue) msize(tiny) || ///
+scatter validation_error nvars, mcolor(red) msize(tiny)
+restore
+
+
+*RANDOM FOREST #1******************************************************************
+ 
+drop if missing(review_scores_rating) & data_class == 1
+replace review_scores_rating = 1 if data_class == 2
+replace review_scores_rating = 1 if data_class == 3
+
+sort data_class
+
+set seed 201807
+randomforest review_scores_rating calculated_host_listings_count number_of_reviews reviews_per_month extra_people bedrooms ///
+		bathrooms beds amenities_length transit_length rules_length ///
+		host_response_cat sex_cat age_cat race_cat property_type_cat room_type_cat bed_type_cat ///
+		host_is_superhost instant_bookable has_access has_hood has_transit has_space has_amenities has_rules  ///
+			in 1/39719, ///
+			type(reg) iter(150) numvars(20) depth(128) lsize(10)
+
+predict review_scores_rating_predicted in 39720/49308
+
+br
+
+ereturn list
+
+preserve 
+drop if review_scores_rating_predicted== .
+keep id review_scores_rating_predicted 
+export delimited "\Users\aless\OneDrive\Desktop\Data Construction\pset_3\rf1ff.csv  
+restore
+
+preserve
+drop if review_scores_rating_predicted == .
+regress review_scores_rating review_scores_rating_predicted 
+restore 
+
+drop review_scores_rating_predicted
+
+*RANDOM FOREST #2 BY PRICE
+
+sort price
+egen price_cut = cut(price), group(10)
+
+gen high_reviews = number_of_reviews >= 24
+	gen high_reviews2 = number_of_reviews >= 56
+	gen high_reviews3 = number_of_reviews >= 85
+
+gen price_high = price >= 198
+	gen price_high2 = price >= 350
+	gen price_high3 = price >=500
+
+drop if data_class == 2
+sort data_class
+
+set seed 201807
+randomforest review_scores_rating calculated_host_listings_count number_of_reviews reviews_per_month extra_people bedrooms ///
+		bathrooms beds amenities_length transit_length rules_length ///
+		host_response_cat sex_cat age_cat race_cat property_type_cat room_type_cat bed_type_cat ///
+		host_is_superhost instant_bookable has_access has_hood has_transit has_space has_amenities has_rules   ///
+		state_CA high_reviews high_reviews2 high_reviews3 price_high price_high2 price_high3 ///
+			in 1/39719, ///
+			type(reg) iter(150) numvars(20) depth(128) lsize(10)
+
+predict review_scores_rating_predicted in 39720/49372
+
+br
+
+preserve 
+drop if review_scores_rating_predicted == .
+keep id review_scores_rating_predicted
+export delimited "\Users\aless\OneDrive\Desktop\Data Construction\pset_3\ff"
+restore  
+
+ereturn list
+	
+regress review_scores_rating review_scores_rating_predicted
+
+
+
+
