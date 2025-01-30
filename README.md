@@ -34,4 +34,4 @@ University of Chicago
 -	Liaised with researchers, local health and academic institutions, and governmental agencies nationally and internationally, facilitating cooperation and allowing access to previously underutilized or new data sources.
 
 ### Projects
-See projects at 
+See projects at my GitHub [portfolio page](https://github.com/aeguerrero-rangosch/portfolio/tree/main).
