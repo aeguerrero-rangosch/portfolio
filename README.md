@@ -1,4 +1,4 @@
-# Data Analyst
+# Data Scientist & Analyst
 
 ### Education
 **Tilburg University**, *Tilburg, The Netherlands*
