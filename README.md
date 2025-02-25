@@ -11,10 +11,9 @@
 
 **Programming Languages**: Python, R, SQL, Matlab, STATA.
 
-**Technologies**: Tableau, Power BI, Mathematica, Excel, Git.
+**Technologies**: Tableau, Mathematica, Excel, Git.
 
 ### Work Experience
-**Research Assistant**
 
 **Freelance Data Analyst and Scientist** | Houston, Texas *(2022-2024)*
 -	Operating as a freelancer, I offered personalized services to address the unique needs of each client.
@@ -29,8 +28,8 @@
 **Data Science Research Assistant** | Chicago, Illinois *(2019-2020)*
 -	The Harris School of Public Policy is part of the University of Chicago, and a renowned center of public policy and social science research.
 -	Leveraged skills in rigorous econometrics to develop experimental designs according to the needs of research leaders and teams.
--	Coordinated 2 interdisciplinary projects to assess how various policies affected public health trends and economic outcomes.
--	Used GIS tools and led a team of 6 research assistants to conduct novel analyses of U.S. Census and health data, leading to insights that will help inform policy recommendations and better forecasting of future health outcomes worldwide.
+-	Coordinated interdisciplinary projects to assess how various policies affected public health trends and economic outcomes.
+-	Used GIS tools and guided other research assistants to conduct novel analyses of U.S. Census and health data, leading to insights that will help inform policy recommendations and better forecasting of future health outcomes worldwide.
 -	Contributed to the development of statistical models that evaluated the efficacy of health and conservation initiatives.
 -	Processed large data sets with R, Python, and STATA to extract actionable insights for research and policy analysis.
 -	Collaborated with peers to implement coding best practices, improving overall project maintainability and team productivity in pursuit of more effectively analyzing data.
